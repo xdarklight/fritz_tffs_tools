@@ -6,6 +6,8 @@
  *
  * Based on the TFFS 2.0 kernel driver from AVM:
  *     Copyright (c) 2004-2007 AVM GmbH <fritzbox_info@avm.de>
+ * and the OpenWrt TFFS kernel driver:
+ *     Copyright (c) 2013 John Crispin <blogic@openwrt.org>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
