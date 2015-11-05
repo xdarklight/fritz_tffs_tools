@@ -1,4 +1,4 @@
-Utilties for TFFS (a name-value storage usually found in AVM Fritz!Box based devices)
+Userspace utilties for accessing TFFS (a name-value storage usually found in AVM Fritz!Box based devices)
 
 ## Building
 
