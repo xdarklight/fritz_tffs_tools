@@ -37,7 +37,8 @@
 
 #define ARRAYSIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
-#define DEFAULT_TFFS_SIZE (256 * 1024)
+#define DEFAULT_TFFS_SIZE	(256 * 1024)
+#define TFFS_ID_END		0xffff
 
 static char *progname;
 static char *input_file;
@@ -106,7 +107,7 @@ static uint32_t tffs_parse(uint8_t *buffer)
 		entry_hdr->id = ntohs(entry_hdr->id);
 		entry_hdr->len = ntohs(entry_hdr->len);
 
-		if (entry_hdr->id == 0xffff)
+		if (entry_hdr->id == TFFS_ID_END)
 			goto end;
 
 		pos += sizeof(struct tffs_entry_header);
