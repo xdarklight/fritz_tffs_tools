@@ -46,6 +46,7 @@ static unsigned long tffs_size = DEFAULT_TFFS_SIZE;
 static char *name_filter = 0;
 static uint8_t show_all = 0;
 static uint8_t print_all_key_names = 0;
+static uint8_t swap_bytes = 0;
 
 struct tffs_entry_header {
 	uint16_t id;
@@ -71,17 +72,26 @@ struct tffs_key_name_table {
 
 static inline uint16_t get_header_len(const struct tffs_entry_header *header)
 {
-	return ntohs(header->len);
+	if (swap_bytes)
+		return ntohs(header->len);
+
+	return header->len;
 }
 
 static inline uint16_t get_header_id(const struct tffs_entry_header *header)
 {
-	return ntohs(header->id);
+	if (swap_bytes)
+		return ntohs(header->id);
+
+	return header->id;
 }
 
 static inline uint16_t to_entry_header_id(uint32_t name_id)
 {
-	return ntohl(name_id) & 0xffff;
+	if (swap_bytes)
+		return ntohl(name_id) & 0xffff;
+
+	return name_id & 0xffff;
 }
 
 static inline uint32_t get_walk_size(uint32_t entry_len)
@@ -231,6 +241,7 @@ static void usage(int status)
 	"\n"
 	"Options:\n"
 	"  -a              list all key value pairs found in the TFFS file/device\n"
+	"  -b              swap bytes while parsing the TFFS file/device\n"
 	"  -h              show this screen\n"
 	"  -i <file>       inspect the given TFFS file/device <file>\n"
 	"  -l              list all supported keys\n"
@@ -254,7 +265,7 @@ static void parse_options(int argc, char *argv[])
 	{
 		int c;
 
-		c = getopt(argc, argv, "ahi:ln:s");
+		c = getopt(argc, argv, "abhi:ln:s");
 		if (c == -1)
 			break;
 
@@ -263,6 +274,9 @@ static void parse_options(int argc, char *argv[])
 				show_all = 1;
 				name_filter = NULL;
 				print_all_key_names = 0;
+				break;
+			case 'b':
+				swap_bytes = 1;
 				break;
 			case 'h':
 				usage(EXIT_SUCCESS);
@@ -335,8 +349,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (!find_entry(buffer, TFFS_ID_TABLE_NAME, &name_table)) {
-		fprintf(stderr, "ERROR: No name table found in tffs file %s\n",
+		fprintf(stderr,"ERROR: No name table found in tffs file %s\n",
 			input_file);
+		fprintf(stderr,"       Is byte-swapping (-b) required?\n");
 		goto out_free;
 	}
 
