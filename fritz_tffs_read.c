@@ -2,7 +2,7 @@
  * A tool for reading the TFFS partitions (a name-value storage usually
  * found in AVM Fritz!Box based devices).
  *
- * Copyright (c) 2015 Martin Blumenstingl <martin.blumenstingl@googlemail.com>
+ * Copyright (c) 2015-2016 Martin Blumenstingl <martin.blumenstingl@googlemail.com>
  *
  * Based on the TFFS 2.0 kernel driver from AVM:
  *     Copyright (c) 2004-2007 AVM GmbH <fritzbox_info@avm.de>
