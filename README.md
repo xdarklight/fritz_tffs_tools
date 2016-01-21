@@ -23,7 +23,7 @@ fritz_tffs_read -i /dev/mtdX -a
 
 Output only the value of a specific key (this will only show the value):
 ```
-fritz_tffs_read -i /dev/mtdX -n hw_revision
+fritz_tffs_read -i /dev/mtdX -n my_ipaddress
 ```
 
 ## LICENSE
