@@ -45,7 +45,7 @@ static unsigned long tffs_size = DEFAULT_TFFS_SIZE;
 static char *name_filter = 0;
 static uint8_t show_all = 0;
 
-struct tffs_entry {
+struct tffs_entry_header {
     uint16_t id;
     uint16_t len;
 };
@@ -98,31 +98,31 @@ static struct tffs_id* tffs_find_id(int id)
 static uint32_t tffs_parse(uint8_t *buffer)
 {
 	struct tffs_id *id;
-	struct tffs_entry *entry;
+	struct tffs_entry_header *entry_hdr;
 	uint32_t pos = 0, count = 0;
 
-	while (pos + sizeof(struct tffs_entry) < tffs_size) {
-		entry = (struct tffs_entry *) &buffer[pos];
-		entry->id = ntohs(entry->id);
-		entry->len = ntohs(entry->len);
+	while (pos + sizeof(struct tffs_entry_header) < tffs_size) {
+		entry_hdr = (struct tffs_entry_header *) &buffer[pos];
+		entry_hdr->id = ntohs(entry_hdr->id);
+		entry_hdr->len = ntohs(entry_hdr->len);
 
-		if (entry->id == 0xffff)
+		if (entry_hdr->id == 0xffff)
 			goto end;
 
-		pos += sizeof(struct tffs_entry);
+		pos += sizeof(struct tffs_entry_header);
 
-		id = tffs_find_id(entry->id);
+		id = tffs_find_id(entry_hdr->id);
 		if (id) {
-			id->len = entry->len;
+			id->len = entry_hdr->len;
 			id->offset = pos;
-			id->val = calloc(entry->len + 1, 1);
+			id->val = calloc(entry_hdr->len + 1, 1);
 
-			memcpy(id->val, &buffer[pos], entry->len);
+			memcpy(id->val, &buffer[pos], entry_hdr->len);
 
 			++count;
 		}
 
-		pos += (entry->len + 3) & ~0x03;
+		pos += (entry_hdr->len + 3) & ~0x03;
 	}
 
 end:
