@@ -26,10 +26,6 @@ Output only the value of a specific key (this will only show the value):
 fritz_tffs_read -i /dev/mtdX -n hw_revision
 ```
 
-## Notes
-
-Keys that are not listed in the **ids** array in `fritz_ffs_read.c` are currently not supported.
-
 ## LICENSE
 
 See `LICENSE`:
