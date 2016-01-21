@@ -11,6 +11,11 @@ make
 
 ## Usage
 
+All command line parameters are documented:
+```
+fritz_tffs_read -h
+```
+
 Show all entries from a TFFS partition dump  (in the format: name=value):
 ```
 fritz_tffs_read -i /path/to/tffs.dump -a
