@@ -24,6 +24,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -43,10 +44,10 @@
 static char *progname;
 static char *input_file;
 static unsigned long tffs_size = DEFAULT_TFFS_SIZE;
-static char *name_filter = 0;
-static uint8_t show_all = 0;
-static uint8_t print_all_key_names = 0;
-static uint8_t swap_bytes = 0;
+static char *name_filter = NULL;
+static bool show_all = false;
+static bool print_all_key_names = false;
+static bool swap_bytes = false;
 
 struct tffs_entry_header {
 	uint16_t id;
@@ -271,9 +272,9 @@ static void parse_options(int argc, char *argv[])
 
 		switch (c) {
 			case 'a':
-				show_all = 1;
+				show_all = true;
 				name_filter = NULL;
-				print_all_key_names = 0;
+				print_all_key_names = false;
 				break;
 			case 'b':
 				swap_bytes = 1;
@@ -285,14 +286,14 @@ static void parse_options(int argc, char *argv[])
 				input_file = optarg;
 				break;
 			case 'l':
-				print_all_key_names = 1;
-				show_all = 0;
+				print_all_key_names = true;
+				show_all = false;
 				name_filter = NULL;
 				break;
 			case 'n':
 				name_filter = optarg;
-				show_all = 0;
-				print_all_key_names = 0;
+				show_all = false;
+				print_all_key_names = false;
 				break;
 			case 's':
 				tffs_size = strtoul(optarg, NULL, 0);
