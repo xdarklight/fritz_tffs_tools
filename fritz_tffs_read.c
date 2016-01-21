@@ -51,7 +51,7 @@ struct tffs_entry {
 };
 
 static struct tffs_id {
-	uint32_t id;
+	uint16_t id;
 	char *name;
 	void *val;
 	uint32_t offset;
