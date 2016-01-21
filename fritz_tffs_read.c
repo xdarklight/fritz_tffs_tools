@@ -35,107 +35,191 @@
 #include <sys/stat.h>
 #include <arpa/inet.h>
 
-#define ARRAYSIZE(arr) (sizeof(arr) / sizeof(arr[0]))
-
 #define DEFAULT_TFFS_SIZE	(256 * 1024)
+
 #define TFFS_ID_END		0xffff
+#define TFFS_ID_TABLE_NAME	0x01ff
 
 static char *progname;
 static char *input_file;
 static unsigned long tffs_size = DEFAULT_TFFS_SIZE;
 static char *name_filter = 0;
 static uint8_t show_all = 0;
+static uint8_t print_all_key_names = 0;
 
 struct tffs_entry_header {
-    uint16_t id;
-    uint16_t len;
-};
-
-static struct tffs_id {
 	uint16_t id;
-	char *name;
-	void *val;
-	uint32_t offset;
-	uint32_t len;
-} ids[] = {
-	{ 0x0100, "hw_revision" },
-	{ 0x0101, "productid" },
-	{ 0x0102, "serialnumber" },
-	{ 0x0103, "dmc" },
-	{ 0x0104, "hw_subrevision" },
-	{ 0x0182, "bootloader_version" },
-	{ 0x0184, "macbluetooth" },
-	{ 0x0188, "maca" },
-	{ 0x0189, "macb" },
-	{ 0x018A, "macwlan" },
-	{ 0x018B, "macdsl" },
-	{ 0x018F, "my_ipaddress" },
-	{ 0x0195, "macwlan2" },
-	{ 0x01A3, "usb_device_id" },
-	{ 0x01A3, "usb_revision_id" },
-	{ 0x01A4, "usb_device_name" },
-	{ 0x01A5, "usb_manufacturer_name" },
-	{ 0x01A6, "firmware_version" },
-	{ 0x01A7, "language" },
-	{ 0x01A8, "country" },
-	{ 0x01A9, "annex" },
-	{ 0x01AB, "wlan_key" },
-	{ 0x01AD, "http_key" },
-	{ 0x01B8, "wlan_cal" },
-	{ 0x01FD, "urlader_version" },
+	uint16_t len;
 };
 
-static struct tffs_id* tffs_find_id(int id)
+struct tffs_entry {
+	const struct tffs_entry_header *header;
+	char *name;
+	uint8_t *val;
+	uint32_t offset;
+};
+
+struct tffs_name_table_entry {
+	const uint32_t *id;
+	const char *val;
+};
+
+struct tffs_key_name_table {
+	uint32_t size;
+	struct tffs_name_table_entry *entries;
+};
+
+static inline uint16_t get_header_len(const struct tffs_entry_header *header)
+{
+	return ntohs(header->len);
+}
+
+static inline uint16_t get_header_id(const struct tffs_entry_header *header)
+{
+	return ntohs(header->id);
+}
+
+static inline uint16_t to_entry_header_id(uint32_t name_id)
+{
+	return ntohl(name_id) & 0xffff;
+}
+
+static inline uint32_t get_walk_size(uint32_t entry_len)
+{
+	return (entry_len + 3) & ~0x03;
+}
+
+static void print_entry_value(const struct tffs_entry *entry)
 {
 	int i;
 
-	for (i = 0; i < ARRAYSIZE(ids); i++)
-		if (id == ids[i].id)
-			return &ids[i];
-
-	return NULL;
+	/* These are NOT NULL terminated. */
+	for (i = 0; i < get_header_len(entry->header); i++)
+		fprintf(stdout, "%c", entry->val[i]);
 }
 
-static uint32_t tffs_parse(uint8_t *buffer)
+static void parse_entry(uint8_t *buffer, uint32_t pos,
+			struct tffs_entry *entry)
 {
-	struct tffs_id *id;
-	struct tffs_entry_header *entry_hdr;
-	uint32_t pos = 0, count = 0;
+	uint32_t value_offset;
 
-	while (pos + sizeof(struct tffs_entry_header) < tffs_size) {
-		entry_hdr = (struct tffs_entry_header *) &buffer[pos];
-		entry_hdr->id = ntohs(entry_hdr->id);
-		entry_hdr->len = ntohs(entry_hdr->len);
+	entry->header = (struct tffs_entry_header *) &buffer[pos];
+	entry->offset = pos;
 
-		if (entry_hdr->id == TFFS_ID_END)
-			goto end;
+	value_offset = pos + sizeof(struct tffs_entry_header);
+
+	entry->val = &buffer[value_offset];
+}
+
+static int find_entry(uint8_t *buffer, uint16_t id, struct tffs_entry *entry)
+{
+	uint32_t pos = 0;
+
+	do {
+		parse_entry(buffer, pos, entry);
+
+		if (get_header_id(entry->header) == id)
+			return 1;
 
 		pos += sizeof(struct tffs_entry_header);
+		pos += get_walk_size(get_header_len(entry->header));
+	} while (pos < tffs_size && entry->header->id != TFFS_ID_END);
 
-		id = tffs_find_id(entry_hdr->id);
-		if (id) {
-			id->len = entry_hdr->len;
-			id->offset = pos;
-			id->val = calloc(entry_hdr->len + 1, 1);
-
-			memcpy(id->val, &buffer[pos], entry_hdr->len);
-
-			++count;
-		}
-
-		pos += (entry_hdr->len + 3) & ~0x03;
-	}
-
-end:
-	return count;
+	return 0;
 }
 
-static void print_all_key_names(void)
+static void parse_key_names(struct tffs_entry *names_entry,
+			    struct tffs_key_name_table *key_names)
+{
+	uint32_t pos = 0, i = 0;
+	struct tffs_name_table_entry *name_item;
+
+	key_names->entries = calloc(sizeof(*name_item), 1);
+
+	do {
+		name_item = &key_names->entries[i];
+
+		name_item->id = (uint32_t *) &names_entry->val[pos];
+		pos += sizeof(*name_item->id);
+		name_item->val = (const char *) &names_entry->val[pos];
+
+		/*
+		 * There is no "length" field because the string values are
+		 * simply NULL-terminated -> strlen() gives us the size.
+		 */
+		pos += get_walk_size(strlen(name_item->val) + 1);
+
+		++i;
+		key_names->entries = realloc(key_names->entries,
+						sizeof(*name_item) * (i + 1));
+	} while (pos < get_header_len(names_entry->header));
+
+	key_names->size = i;
+}
+
+static void show_all_key_names(struct tffs_key_name_table *key_names)
 {
 	int i;
 
-	for (i = 0; i < ARRAYSIZE(ids); i++)
-		fprintf(stdout, "%s\n", ids[i].name);
+	for (i = 0; i < key_names->size; i++)
+		printf("%s\n", key_names->entries[i].val);
+}
+
+static int show_all_key_value_pairs(uint8_t *buffer,
+				    struct tffs_key_name_table *key_names)
+{
+	int i, has_value = 0;
+	uint16_t id;
+	struct tffs_entry tmp;
+
+	for (i = 0; i < key_names->size; i++) {
+		id = to_entry_header_id(*key_names->entries[i].id);
+
+		if (find_entry(buffer, id, &tmp)) {
+			printf("%s=", key_names->entries[i].val);
+			print_entry_value(&tmp);
+			printf("\n");
+			has_value++;
+		}
+	}
+
+	if (!has_value) {
+		fprintf(stderr, "ERROR: no values found!\n");
+		return EXIT_FAILURE;
+	}
+
+	return EXIT_SUCCESS;
+}
+
+static int show_matching_key_value(uint8_t *buffer,
+				   struct tffs_key_name_table *key_names)
+{
+	int i;
+	uint16_t id;
+	struct tffs_entry tmp;
+	const char *name;
+
+	for (i = 0; i < key_names->size; i++) {
+		name = key_names->entries[i].val;
+
+		if (strncmp(name, name_filter, strlen(name)) == 0) {
+			id = to_entry_header_id(*key_names->entries[i].id);
+
+			if (find_entry(buffer, id, &tmp)) {
+				print_entry_value(&tmp);
+				printf("\n");
+				return EXIT_SUCCESS;
+			} else {
+				fprintf(stderr,
+					"ERROR: no value found for name %s!\n",
+					name);
+				return EXIT_FAILURE;
+			}
+		}
+	}
+
+	fprintf(stderr, "ERROR: Unknown key name %s!\n", name_filter);
+	return EXIT_FAILURE;
 }
 
 static void usage(int status)
@@ -177,6 +261,8 @@ static void parse_options(int argc, char *argv[])
 		switch (c) {
 			case 'a':
 				show_all = 1;
+				name_filter = NULL;
+				print_all_key_names = 0;
 				break;
 			case 'h':
 				usage(EXIT_SUCCESS);
@@ -185,10 +271,14 @@ static void parse_options(int argc, char *argv[])
 				input_file = optarg;
 				break;
 			case 'l':
-				print_all_key_names();
-				exit(EXIT_SUCCESS);
+				print_all_key_names = 1;
+				show_all = 0;
+				name_filter = NULL;
+				break;
 			case 'n':
 				name_filter = optarg;
+				show_all = 0;
+				print_all_key_names = 0;
 				break;
 			case 's':
 				tffs_size = strtoul(optarg, NULL, 0);
@@ -209,18 +299,20 @@ static void parse_options(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	if (!show_all && !name_filter) {
+	if (!show_all && !name_filter && !print_all_key_names) {
 		fprintf(stderr,
-			"ERROR: either -a or -n <key name> is required!\n");
+			"ERROR: either -l, -a or -n <key name> is required!\n");
 		exit(EXIT_FAILURE);
 	}
 }
 
 int main(int argc, char *argv[])
 {
-	int i, ret = EXIT_FAILURE;
+	int ret = EXIT_FAILURE;
 	uint8_t *buffer;
 	FILE *fp;
+	struct tffs_entry name_table;
+	struct tffs_key_name_table key_names;
 
 	progname = basename(argv[0]);
 
@@ -242,30 +334,30 @@ int main(int argc, char *argv[])
 		goto out_free;
 	}
 
-	if (!tffs_parse(buffer)) {
-		fprintf(stderr, "ERROR: No values found in tffs file %s\n",
+	if (!find_entry(buffer, TFFS_ID_TABLE_NAME, &name_table)) {
+		fprintf(stderr, "ERROR: No name table found in tffs file %s\n",
 			input_file);
 		goto out_free;
 	}
 
-	for (i = 0; i < ARRAYSIZE(ids); i++) {
-		if (ids[i].val) {
-			if (show_all) {
-				fprintf(stdout, "%s=%s\n",
-					ids[i].name, (char *) ids[i].val);
-				ret = EXIT_SUCCESS;
-			} else if (strcmp(name_filter, ids[i].name) == 0) {
-				fprintf(stdout, "%s\n", (char *) ids[i].val);
-				ret = EXIT_SUCCESS;
-				break;
-			}
-		}
+	parse_key_names(&name_table, &key_names);
+	if (key_names.size < 1) {
+		fprintf(stderr, "ERROR: No name table found in tffs file %s\n",
+			input_file);
+		goto out_free_names;
 	}
 
-	if (name_filter && ret == EXIT_FAILURE) {
-		fprintf(stderr, "ERROR: Key '%s' was not found in %s\n",
-			name_filter, input_file);
+	if (print_all_key_names) {
+		show_all_key_names(&key_names);
+		ret = EXIT_SUCCESS;
+	} else if (show_all) {
+		ret = show_all_key_value_pairs(buffer, &key_names);
+	} else {
+		ret = show_matching_key_value(buffer, &key_names);
 	}
+
+out_free_names:
+	free(key_names.entries);
 out_free:
 	fclose(fp);
 	free(buffer);
