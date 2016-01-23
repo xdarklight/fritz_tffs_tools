@@ -58,7 +58,6 @@ struct tffs_entry {
 	const struct tffs_entry_header *header;
 	char *name;
 	uint8_t *val;
-	uint32_t offset;
 };
 
 struct tffs_name_table_entry {
@@ -112,14 +111,8 @@ static void print_entry_value(const struct tffs_entry *entry)
 static void parse_entry(uint8_t *buffer, uint32_t pos,
 			struct tffs_entry *entry)
 {
-	uint32_t value_offset;
-
 	entry->header = (struct tffs_entry_header *) &buffer[pos];
-	entry->offset = pos;
-
-	value_offset = pos + sizeof(struct tffs_entry_header);
-
-	entry->val = &buffer[value_offset];
+	entry->val = &buffer[pos + sizeof(struct tffs_entry_header)];
 }
 
 static int find_entry(uint8_t *buffer, uint16_t id, struct tffs_entry *entry)
